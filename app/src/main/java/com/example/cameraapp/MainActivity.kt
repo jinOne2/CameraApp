@@ -1,37 +1,87 @@
 package com.example.cameraapp
 
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.util.Log
+import android.view.Menu
+import android.view.MenuItem
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.recyclerview.widget.GridLayoutManager
 import com.example.cameraapp.databinding.ActivityMainBinding
 
 class MainActivity : AppCompatActivity() {
 
-
     private val imageLoadLauncher = registerForActivityResult(
         ActivityResultContracts.GetMultipleContents()) {
-        uriList ->updateImages(uriList)
+            uriList -> updateImages(uriList)
     }
     private lateinit var binding: ActivityMainBinding
+    private lateinit var imageAdapter: ImageAdapter
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        binding.toolbar.apply {
+            title = "사진 가져오기"
+            setSupportActionBar(this)
+        }
+
         binding.loadImageButton.setOnClickListener {
             Toast.makeText(this, "확인", Toast.LENGTH_LONG).show()
             checkPermission()
         }
+        binding.navigateFrameActivityButton.setOnClickListener {
+            navigateToFrameActivity()
+        }
+        initRecyclerView()
+    }
 
+    override fun onCreateOptionsMenu(menu: Menu?): Boolean {
+        menuInflater.inflate(R.menu.main_menu, menu)
+        return true
+    }
 
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        return when(item.itemId) {
+            R.id.action_add -> {
+                checkPermission()
+                true
+            }
+            else -> {
+                super.onOptionsItemSelected(item)
+            }
+        }
+    }
+
+    private fun navigateToFrameActivity(){
+        val images = imageAdapter.currentList.filterIsInstance<ImageItems.Image>().map {
+            it.uri.toString()
+        }.toTypedArray()
+        val intent = Intent(this, FrameActivity::class.java)
+            .putExtra("images", images)
+        startActivity(intent)
+    }
+
+    private fun initRecyclerView(){
+        imageAdapter = ImageAdapter(object : ImageAdapter.ItemClickListener{
+            override fun onLoadMoreClick() {
+                checkPermission()
+            }
+        })
+
+        binding.imageRecyclerView.apply {
+            adapter = imageAdapter
+            layoutManager = GridLayoutManager(context, 2)
+        }
     }
 
     private fun checkPermission(){
@@ -81,7 +131,8 @@ class MainActivity : AppCompatActivity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         when(requestCode){
             REQUEST_READ_EXTERNAL_STORAGE -> {
-                if(grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
+                val resultCode = grantResults.firstOrNull() ?: PackageManager.PERMISSION_DENIED
+                if(resultCode == PackageManager.PERMISSION_GRANTED) {
                     loadImage()
                 }
             }
@@ -94,6 +145,13 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateImages(uriList: List<Uri>){
         Log.i("updateImages", "$uriList")
+        val images = uriList.map{
+            ImageItems.Image(it)
+        }
+        val updatedImages = imageAdapter.currentList.toMutableList().apply {
+            addAll(images)
+        }
+        imageAdapter.submitList(updatedImages)
     }
 
     companion object {
